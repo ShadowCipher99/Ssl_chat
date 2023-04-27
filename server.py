@@ -17,8 +17,8 @@ class Server:
             os.system('openssl req -new -key server.key -x509 -sha512 -days 365 -out server.crt')
 
         # Установка настроек сервера: адрес и порт, список соединений
-        self.HOST = '192.168.0.2' # Подключение ко всем адресам сети
-        self.PORT = 8080
+        self.HOST = '127.0.0.1'
+        self.PORT = 9000
         self.connections = []
 
         # Создание сокета
