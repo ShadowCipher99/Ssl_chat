@@ -25,9 +25,9 @@ class Server:
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
         # Оборачиваем сокет в SSL - SSL контекст
-        ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        ssl_context.load_cert_chain('server.crt', 'server.key')
-        self.s_ssl = ssl_context.wrap_socket(self.s, server_side=True) # Сокет, созданный с помощью ssl контекста
+        context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        context.load_cert_chain('server.crt', 'server.key')
+        self.s_ssl = context.wrap_socket(self.s, server_side=True) # Сокет, созданный с помощью SSL контекста
 
     def start(self):
         # Подключение к порту и ожидание клиента
