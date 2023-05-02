@@ -1,11 +1,15 @@
 # Импорт модуля SSL - протокол безопасной передачи данных
 import ssl
+
 # Импорт модуля нитей
 import threading
+
 # Импорт модуля сокетов для работы с сетью
 import socket
+
 # Импорт модуля ОС для работы с операционной системой
 import os
+
 
 # Создание класса сервера
 class Server:
@@ -38,8 +42,7 @@ class Server:
         while True:
             # Подключение к порту и ожидание клиента
             conn, addr = self.s_ssl.accept() #Принимаем входящее соединение, в том числе SSL
-            print('Client connected:', addr)
-
+            
             # Добавление соединения в список
             self.connections.append(conn)
 
@@ -47,28 +50,23 @@ class Server:
             threading.Thread(target=self.handle_client, args=(conn,)).start()
 
     def handle_client(self, conn):
-        # Определение адреса отправителя
-        sender = conn.getpeername()
-        print('Sender:', sender)
-
-        # Отправляем сообщения клиенту
         while True:
-            data = conn.recv(1024) #1024 - максимальный размер передаваемых данных
-            if data:
-                print('Received:', data.decode()) #декодирование байтов данных
+            # Отправляем сообщения клиенту
+            data = conn.recv(1024)  # 1024 - максимальный размер передаваемых данных
 
+            if data:
+                sender = conn.getpeername()
                 # Отправляем сообщение всем клиентам кроме отправителя
                 for client_conn in self.connections:
                     if client_conn != conn:
                         client_conn.sendall(('Client ' + str(sender) + ': ' + data.decode()).encode()) #шифрование и отправка данных, если соединение не является исходным
-
             else:
-                print('Client disconnected:', sender)
                 conn.close()
 
                 # Удаление соединения из списка
                 self.connections.remove(conn)
                 break
+
 
 # Создание объекта сервера и запуск
 server = Server()
