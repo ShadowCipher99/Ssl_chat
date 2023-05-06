@@ -1,86 +1,86 @@
-# Импорт модуля SSL - протокол безопасной передачи данных
+# Импортируем модуль SSL для создания безопасного подключения
 import ssl
 
-# Импорт модуля нитей
+# Импортируем модуль threading для работы с нитями
 import threading
 
-# Импорт модуля сокетов для работы с сетью
+# Импортируем модуль socket для работы с сетью
 import socket
 
-# Импорт модуля ОС для работы с операционной системой
+# Импортируем модуль os для работы с операционной системой
 import os
 
-# Импорт модуля pyopenssl для генерации и использования сертификатов и ключей
+# Импортируем модуль pyopenssl для генерации и использования сертификатов и ключей
 from OpenSSL import crypto
 
-# Создание класса сервера
+# Создаем класс сервера
 class Server:
     def __init__(self):
-        # Проверка наличия сертификата и ключа
+        # Проверяем наличие сертификата и ключа
         if not os.path.exists('server.crt') or not os.path.exists('server.key'):
-            # Генерация самоподписанного сертификата и ключа
-            k = crypto.PKey()
-            k.generate_key(crypto.TYPE_RSA, 16384)
-            cert = crypto.X509()
-            cert.get_subject().CN = 'localhost'
-            cert.set_issuer(cert.get_subject())
-            cert.set_pubkey(k)
-            cert.gmtime_adj_notBefore(0)
-            cert.gmtime_adj_notAfter(365 * 24 * 60 * 60)
-            cert.sign(k, "sha1")
+            # Генерируем самоподписанный сертификат и ключ
+            k = crypto.PKey() #генерация нового ключа
+            k.generate_key(crypto.TYPE_RSA, 16384) #определение типа ключа и его длины
+            cert = crypto.X509() #создание нового экземпляра класса X509 - цифрового сертификата
+            cert.get_subject().CN = 'localhost' #задаем имя целевой системы
+            cert.set_issuer(cert.get_subject()) #задаем данные об издателе
+            cert.set_pubkey(k) #задаем открытый ключ в сертификат
+            cert.gmtime_adj_notBefore(0) #задаем время начала действия сертификата
+            cert.gmtime_adj_notAfter(365 * 24 * 60 * 60) #задаем время окончания действия сертификата
+            cert.sign(k, "sha1") #подписываем сертификат
             with open("server.key", "wb") as key_file:
-                key_file.write(crypto.dump_privatekey(crypto.FILETYPE_PEM, k))
+                key_file.write(crypto.dump_privatekey(crypto.FILETYPE_PEM, k)) #записываем в файл содержимое ключа
             with open("server.crt", "wb") as cert_file:
-                cert_file.write(crypto.dump_certificate(crypto.FILETYPE_PEM, cert))
+                cert_file.write(crypto.dump_certificate(crypto.FILETYPE_PEM, cert)) #записываем в файл содержимое сертификата
 
-        # Установка настроек сервера: адрес и порт, список соединений
-        self.HOST = '127.0.0.1'
-        self.PORT = 9000
-        self.connections = []
+        # Устанавливаем настройки сервера: адрес и порт, список соединений
+        self.HOST = '127.0.0.1' #адрес сервера
+        self.PORT = 9000 #порт сервера
+        self.connections = [] #контактный список
 
-        # Создание сокета
-        self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # Создаем сокет
+        self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM) #IPv4, TCP
 
-        # Оборачиваем сокет в SSL - SSL контекст
-        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        context.load_cert_chain('server.crt', 'server.key')
-        self.s_ssl = context.wrap_socket(self.s, server_side=True) # Сокет, созданный с помощью SSL контекста
+        # Оборачиваем сокет в SSL
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER) #создаем SSL контекст
+        context.load_cert_chain('server.crt', 'server.key') #загружаем сертификат и ключ
+        self.s_ssl = context.wrap_socket(self.s, server_side=True) #оборачиваем сокет в SSL с указанием SSL контекста
 
     def start(self):
-        # Подключение к порту и ожидание клиента
-        self.s_ssl.bind((self.HOST, self.PORT))
-        self.s_ssl.listen(1) #слушаем порт на подключения
-        print('Server started')
+        # Подключаемся к порту и ожидаем клиента
+        self.s_ssl.bind((self.HOST, self.PORT)) #назначаем данному сокету адрес и порт
+        self.s_ssl.listen(1) #слушаем на подключения
+        print('Server started') #выводим сообщение в консоль
 
         while True:
-            # Подключение к порту и ожидание клиента
-            conn, addr = self.s_ssl.accept() #Принимаем входящее соединение, в том числе SSL
-            
-            # Добавление соединения в список
+            # Подключаемся к порту и ожидаем клиента
+            conn, addr = self.s_ssl.accept() #ожидаем входящее подключение
+
+            # Добавляем соединение в список
             self.connections.append(conn)
 
             # Обрабатываем клиента в новом потоке
-            threading.Thread(target=self.handle_client, args=(conn,)).start()
+            threading.Thread(target=self.handle_client, args=(conn,)).start() #запускаем обработку клиента в отдельном потоке
 
     def handle_client(self, conn):
         while True:
             # Отправляем сообщения клиенту
-            data = conn.recv(1024)  # 1024 - максимальный размер передаваемых данных
+            data = conn.recv(1024)  # получаем данные от клиента
 
             if data:
-                sender = conn.getpeername()
-                # Отправляем сообщение всем клиентам кроме отправителя
+                sender = conn.getpeername() #узнаем адрес отправителя
+                # Отправляем сообщение всем клиентам, кроме отправителя
                 for client_conn in self.connections:
                     if client_conn != conn:
-                        client_conn.sendall(('Client ' + str(sender) + ': ' + data.decode()).encode()) #шифрование и отправка данных, если соединение не является исходным
+                        client_conn.sendall(('Client ' + str(sender) + ': ' + data.decode()).encode()) #шифруем и отправляем данные всем клиентам, кроме исходного
             else:
                 conn.close()
 
-                # Удаление соединения из списка
+                # Удаляем соединение из списка
                 self.connections.remove(conn)
                 break
 
 
-# Создание объекта сервера и запуск
+# Создаем объект сервера и запускаем
 server = Server()
 server.start()
