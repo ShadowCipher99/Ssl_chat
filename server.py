@@ -10,6 +10,8 @@ import socket
 # Импорт модуля ОС для работы с операционной системой
 import os
 
+# Импорт модуля pyopenssl для генерации и использования сертификатов и ключей
+from OpenSSL import crypto
 
 # Создание класса сервера
 class Server:
@@ -17,8 +19,19 @@ class Server:
         # Проверка наличия сертификата и ключа
         if not os.path.exists('server.crt') or not os.path.exists('server.key'):
             # Генерация самоподписанного сертификата и ключа
-            os.system('openssl ecparam -genkey -name secp521r1 -noout -out server.key')
-            os.system('openssl req -new -key server.key -x509 -sha512 -days 365 -out server.crt')
+            k = crypto.PKey()
+            k.generate_key(crypto.TYPE_RSA, 16384)
+            cert = crypto.X509()
+            cert.get_subject().CN = 'localhost'
+            cert.set_issuer(cert.get_subject())
+            cert.set_pubkey(k)
+            cert.gmtime_adj_notBefore(0)
+            cert.gmtime_adj_notAfter(365 * 24 * 60 * 60)
+            cert.sign(k, "sha1")
+            with open("server.key", "wb") as key_file:
+                key_file.write(crypto.dump_privatekey(crypto.FILETYPE_PEM, k))
+            with open("server.crt", "wb") as cert_file:
+                cert_file.write(crypto.dump_certificate(crypto.FILETYPE_PEM, cert))
 
         # Установка настроек сервера: адрес и порт, список соединений
         self.HOST = '127.0.0.1'
@@ -29,7 +42,7 @@ class Server:
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
         # Оборачиваем сокет в SSL - SSL контекст
-        context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         context.load_cert_chain('server.crt', 'server.key')
         self.s_ssl = context.wrap_socket(self.s, server_side=True) # Сокет, созданный с помощью SSL контекста
 
