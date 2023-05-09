@@ -1,19 +1,21 @@
-# Импорт необходимых модулей
-import ssl # модуль SSL-шифрования
-import threading # модуль для создания параллельных потоков
-import socket # модуль для работы с сокетами
-import os # модуль для работы с операционной системой
-from OpenSSL import crypto # модуль для генерации сертификатов и ключей через OpenSSL
-import socks # модуль для подключения к сети Tor (анонимный доступ к серверу)
-import socket as sock # модуль для работы с сокетами
+# Импорт модуля SSL - протокол безопасной передачи данных
+import ssl
+
+# Импорт модуля нитей
+import threading
+
+# Импорт модуля сокетов для работы с сетью
+import socket
+
+# Импорт модуля ОС для работы с операционной системой
+import os
+
+# Импорт модуля pyopenssl для генерации и использования сертификатов и ключей
+from OpenSSL import crypto
 
 # Создание класса сервера
 class Server:
-    def init(self):
-        # Подключение к сети Tor для обеспечения анонимности
-        socks.set_default_proxy(socks.SOCKS5, "localhost", 9050)
-        sock.socket = socks.socksocket
-
+    def __init__(self):
         # Проверка наличия сертификата и ключа
         if not os.path.exists('server.crt') or not os.path.exists('server.key'):
             # Генерация самоподписанного сертификата и ключа
@@ -32,9 +34,9 @@ class Server:
                 cert_file.write(crypto.dump_certificate(crypto.FILETYPE_PEM, cert))
 
         # Установка настроек сервера: адрес и порт, список соединений
-        self.HOST = '127.0.0.1' # адрес сервера
-        self.PORT = 9000 # порт сервера
-        self.connections = [] # список соединений
+        self.HOST = '127.0.0.1'
+        self.PORT = 9000
+        self.connections = []
 
         # Создание сокета
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -46,9 +48,9 @@ class Server:
 
     def start(self):
         # Подключение к порту и ожидание клиента
-        self.s_ssl.bind((self.HOST, self.PORT)) # связываем сокет с адресом и портом
+        self.s_ssl.bind((self.HOST, self.PORT))
         self.s_ssl.listen(1) #слушаем порт на подключения
-        print('Server started') # вывод информации о начале работы сервера
+        print('Server started')
 
         while True:
             # Подключение к порту и ожидание клиента
@@ -66,18 +68,18 @@ class Server:
             data = conn.recv(1024)  # 1024 - максимальный размер передаваемых данных
 
             if data:
-                sender = conn.getpeername() # получаем адрес отправителя
+                sender = conn.getpeername()
                 # Отправляем сообщение всем клиентам кроме отправителя
                 for client_conn in self.connections:
                     if client_conn != conn:
-                        # шифрование и отправка данных, если соединение не является исходным
-                        client_conn.sendall(('Client ' + str(sender) + ': ' + data.decode()).encode()) 
+                        client_conn.sendall(('Client ' + str(sender) + ': ' + data.decode()).encode()) #шифрование и отправка данных, если соединение не является исходным
             else:
                 conn.close()
 
                 # Удаление соединения из списка
                 self.connections.remove(conn)
                 break
+
 
 # Создание объекта сервера и запуск
 server = Server()
