@@ -44,18 +44,18 @@ class Server:
         # Оборачиваем сокет в SSL - SSL контекст
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         context.load_cert_chain('server.crt', 'server.key')
-        self.s_ssl = context.wrap_socket(self.s, server_side=True) # Сокет, созданный с помощью SSL контекста
+        self.s_ssl = context.wrap_socket(self.s, server_side=True)  # Сокет, созданный с помощью SSL контекста
 
     def start(self):
         # Подключение к порту и ожидание клиента
         self.s_ssl.bind((self.HOST, self.PORT))
-        self.s_ssl.listen(1) #слушаем порт на подключения
+        self.s_ssl.listen(1)  # слушаем порт на подключения
         print('Server started')
 
         while True:
             # Подключение к порту и ожидание клиента
-            conn, addr = self.s_ssl.accept() #Принимаем входящее соединение, в том числе SSL
-            
+            conn, addr = self.s_ssl.accept()  # Принимаем входящее соединение, в том числе SSL
+
             # Добавление соединения в список
             self.connections.append(conn)
 
@@ -72,7 +72,13 @@ class Server:
                 # Отправляем сообщение всем клиентам кроме отправителя
                 for client_conn in self.connections:
                     if client_conn != conn:
-                        client_conn.sendall(('Client ' + str(sender) + ': ' + data.decode()).encode()) #шифрование и отправка данных, если соединение не является исходным
+                        client_conn.sendall(('Client ' + str(sender) + ': ' + data.decode()).encode())  # шифрование и отправка данных, если соединение не является исходным
+                
+                # Обработка команды /members
+                if data == b'/members':
+                    members = [str(conn.getpeername()) for conn in self.connections]
+                    conn.sendall(('Users connected: \n' + '\n'.join(members)).encode())
+
             else:
                 conn.close()
 
