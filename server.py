@@ -1,92 +1,82 @@
-# Импорт модуля SSL - протокол безопасной передачи данных
-import ssl
-
-# Импорт модуля нитей
-import threading
-
-# Импорт модуля сокетов для работы с сетью
-import socket
-
-# Импорт модуля ОС для работы с операционной системой
 import os
-
-# Импорт модуля pyopenssl для генерации и использования сертификатов и ключей
+import socket
+import ssl
+import threading
 from OpenSSL import crypto
 
-# Создание класса сервера
+if not os.path.exists('server.crt') or not os.path.exists('server.key'):
+    key = crypto.PKey()
+    key.generate_key(crypto.TYPE_RSA, 8192)
+    cert = crypto.X509()
+    cert_version = 2
+    cert.set_version(cert_version)
+    cert.get_subject().CN = b'localhost'
+    cert.set_serial_number(1000)
+    cert.gmtime_adj_notBefore(0)
+    cert.gmtime_adj_notAfter(3600) # Valid for 1  hours
+    cert.set_issuer(cert.get_subject())
+    cert.set_pubkey(key)
+    ip_address = socket.gethostbyname(socket.gethostname())
+    cert.add_extensions([
+        crypto.X509Extension(b'subjectAltName', False,
+                             b','.join([b'DNS:localhost', f'IP:{ip_address}'.encode()])),
+        crypto.X509Extension(b"keyUsage", True, b"Digital Signature, Non Repudiation, Key Encipherment"),
+        crypto.X509Extension(b"extendedKeyUsage", True,
+                             b"TLS Web Server Authentication, TLS Web Client Authentication"),
+        crypto.X509Extension(b"basicConstraints", True, b"CA:FALSE, pathlen:0")
+    ])
+    cert.sign(key, 'sha512')
+    with open('server.crt', 'wb') as cert_file:
+        cert_file.write(crypto.dump_certificate(crypto.FILETYPE_PEM, cert))
+    with open('server.key', 'wb') as key_file:
+        key_file.write(crypto.dump_privatekey(crypto.FILETYPE_PEM, key))
+    print('The SSL certificate and key have been generated successfully.')
+
+
 class Server:
     def __init__(self):
-        # Проверка наличия сертификата и ключа
-        if not os.path.exists('server.crt') or not os.path.exists('server.key'):
-            # Генерация самоподписанного сертификата и ключа
-            k = crypto.PKey()
-            k.generate_key(crypto.TYPE_RSA, 16384)
-            cert = crypto.X509()
-            cert.get_subject().CN = 'localhost'
-            cert.set_issuer(cert.get_subject())
-            cert.set_pubkey(k)
-            cert.gmtime_adj_notBefore(0)
-            cert.gmtime_adj_notAfter(365 * 24 * 60 * 60)
-            cert.sign(k, "sha1")
-            with open("server.key", "wb") as key_file:
-                key_file.write(crypto.dump_privatekey(crypto.FILETYPE_PEM, k))
-            with open("server.crt", "wb") as cert_file:
-                cert_file.write(crypto.dump_certificate(crypto.FILETYPE_PEM, cert))
-
-        # Установка настроек сервера: адрес и порт, список соединений
-        self.HOST = '127.0.0.1'
-        self.PORT = 9000
+        self.host = socket.gethostbyname(socket.gethostname())
+        self.port = 443
         self.connections = []
+        self.ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        self.ssl_context.minimum_version = ssl.TLSVersion.TLSv1_3
+        self.ssl_context.set_ciphers('ECDHE+AESGCM')
+        self.ssl_context.load_cert_chain(certfile='server.crt', keyfile='server.key')
 
-        # Создание сокета
-        self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-        # Оборачиваем сокет в SSL - SSL контекст
-        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        context.load_cert_chain('server.crt', 'server.key')
-        self.s_ssl = context.wrap_socket(self.s, server_side=True)  # Сокет, созданный с помощью SSL контекста
 
     def start(self):
-        # Подключение к порту и ожидание клиента
-        self.s_ssl.bind((self.HOST, self.PORT))
-        self.s_ssl.listen(1)  # слушаем порт на подключения
-        print('Server started')
+        self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.s_ssl = self.ssl_context.wrap_socket(self.s, server_side=True)
+        self.s_ssl.bind((self.host, self.port))
+        self.s_ssl.listen(2)
+        print(f'Server started on {self.host}:{self.port}')
 
         while True:
-            # Подключение к порту и ожидание клиента
-            conn, addr = self.s_ssl.accept()  # Принимаем входящее соединение, в том числе SSL
-
-            # Добавление соединения в список
-            self.connections.append(conn)
-
-            # Обрабатываем клиента в новом потоке
-            threading.Thread(target=self.handle_client, args=(conn,)).start()
+            try:
+                conn, addr = self.s_ssl.accept()
+                self.connections.append(conn)
+                threading.Thread(target=self.handle_client, args=(conn,)).start()
+            except (ssl.SSLError, ssl.CertificateError) as e:
+                continue
 
     def handle_client(self, conn):
         while True:
-            # Отправляем сообщения клиенту
-            data = conn.recv(1024)  # 1024 - максимальный размер передаваемых данных
-
+            try:
+                data = conn.recv(1024)
+            except ssl.SSLError:
+                break
             if data:
                 sender = conn.getpeername()
-                # Отправляем сообщение всем клиентам кроме отправителя
                 for client_conn in self.connections:
                     if client_conn != conn:
-                        client_conn.sendall(('Client ' + str(sender) + ': ' + data.decode()).encode())  # шифрование и отправка данных, если соединение не является исходным
-                
-                # Обработка команды /members
-                if data == b'/members':
-                    members = [str(conn.getpeername()) for conn in self.connections]
-                    conn.sendall(('Users connected: \n' + '\n'.join(members)).encode())
-
+                        client_conn.sendall((data.decode()).encode())
             else:
-                conn.close()
-
-                # Удаление соединения из списка
                 self.connections.remove(conn)
                 break
+        conn.close()
 
 
-# Создание объекта сервера и запуск
-server = Server()
-server.start()
+if __name__ == '__main__':
+    server = Server()
+    server.start()
