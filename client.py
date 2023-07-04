@@ -1,73 +1,83 @@
-# импортируем модуль socket для работы с сетевыми соединениями
 import socket
-# импортируем модуль ssl для использования защищенного сокета
+import threading
 import ssl
-# импортируем модуль click для работы с командной строкой
-import click
-# импортируем модуль os для работы с операционной системой
-import os
-# создаем класс Server для работы с сервером и сокетом
-class Server:
-    # создаем конструктор класса для инициализации переменных и создания объекта сокета
-    def __init__(self, host, port):
-        # инициализируем переменные host и port
-        self.host = host
-        self.port = port
-        # создаем объект сокета, AF_INET указывает на использование сетевого протокола IPv4,
-        # а SOCK_STREAM - на использование потокового сокета
-        self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # создаем объект защищенного сокета с помощью модуля ssl и настроек по умолчанию
-        self.ssl_context = ssl.create_default_context()
-        # отключаем проверку имени хоста
-        self.ssl_context.check_hostname = False
-        # отключаем проверку сертификата, так как мы работаем в локальной сети
-        self.ssl_context.verify_mode = ssl.CERT_NONE
-        # оборачиваем обычный сокет в защищенный с помощью ssl_context
-        # указываем server_hostname, чтобы определить надежность соединения
-        self.s_ssl = self.ssl_context.wrap_socket(self.s, server_hostname=self.host)
+import secrets
+import curses
 
-    # создаем метод для установки соединения с сервером
-    def connect(self):
-        self.s_ssl.connect((self.host, self.port))
-        click.echo(click.style(f"Connected to {self.host} on port {self.port}", fg="green"))
+class ChatApp:
+    def __init__(self):
+        self.HOST = input("host:")
+        self.PORT = 443
+        self.context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        self.context.load_verify_locations('server.crt')
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock_ssl = self.context.wrap_socket(self.sock, server_hostname=self.HOST)
 
-    # создаем метод для отправки сообщения на сервер
-    def send_message(self, message):
-        # отправляем сообщение в защищенном сокете
-        self.s_ssl.sendall(message.encode())
-        # получаем ответ от сервера, если он есть
-        data = self.s_ssl.recv(1024)
-        if data:
-            click.echo(click.style(f"Received: {data.decode()}", fg="yellow"))
-        else:
-            click.echo(click.style("Server disconnected", fg="red"))
-            self.disconnect()
+        # Список цветов для разных отправителей
+        self.colors = [curses.COLOR_RED, curses.COLOR_GREEN, curses.COLOR_BLUE, curses.COLOR_YELLOW, curses.COLOR_MAGENTA, curses.COLOR_CYAN]
+        self.sender_colors = {}  # Словарь для хранения цветов отправителей
 
-    # создаем метод для отключения от сервера
-    def disconnect(self):
-        self.s_ssl.close()
+    def encrypt(self, msg, key):
+        crypt = ''
+        for i in range(len(msg)):
+            crypt += str(ord(msg[i]) ^ ord(key[i])) + " "  # Добавляем пробел после каждого преобразованного символа
+        return crypt
 
-# создаем команду run, которая будет запускать клиентское приложение
-@click.command()
-# создаем опции командной строки для указания хоста и порта
-@click.option('-h', '--host', default='127.0.0.1', help='The host to connect to.')
-@click.option('-p', '--port', default=9000, help='The port to connect to.')
-def run(host, port):
-    # создаем объект класса Server и передаем ему хост и порт
-    server = Server(host, port)
-    # устанавливаем соединение с сервером
-    server.connect()
+    def decrypt(self, crypt, key):
+        key = key.decode('utf-8')
+        message = ''
+        crypt_list = crypt.split()
+        for i in range(len(crypt_list)):
+            message += chr(int(crypt_list[i]) ^ ord(key[i % len(key)]))
+        return message
 
-    # создаем цикл для отправки сообщений на сервер
-    while True:
-        message = input('Client: ')
-        server.send_message(message)
+    def receive(self, stdscr):
+        while True:
+            key = self.sock_ssl.recv(1024)
+            data = self.sock_ssl.recv(1024)
+            decrypt_message = self.decrypt(data.decode('utf-8'), key)
+            sender = key.decode('utf-8')  # Читаем отправителя из ключа
 
-# проверяем, что код запускается как основной файл программы
+            # Проверяем, есть ли цвет для отправителя
+            if sender not in self.sender_colors:
+                # Генерируем новый цвет для отправителя
+                color_pair = len(self.sender_colors) % len(self.colors) + 1
+                curses.init_pair(color_pair, self.colors[color_pair % len(self.colors)], curses.COLOR_BLACK)
+                self.sender_colors[sender] = curses.color_pair(color_pair)
+
+            stdscr.addstr(decrypt_message + '\n', self.sender_colors[sender])
+            stdscr.refresh()
+
+    def start(self, stdscr):
+        self.sock_ssl.connect((self.HOST, self.PORT))
+        stdscr.addstr('Connected to server\n 'Welcome to RENCIR Chat'')
+        stdscr.refresh()
+
+        receive_thread = threading.Thread(target=self.receive, args=(stdscr,))
+        receive_thread.start()
+
+        while True:
+            msg = stdscr.getstr().decode('utf-8')
+            key = ''.join(chr(secrets.choice(range(65, 90))) for _ in range(len(msg)))
+            encrypt_message = self.encrypt(msg, key)
+            self.sock_ssl.sendall(key.encode('utf-8'))
+            self.sock_ssl.sendall(encrypt_message.encode('utf-8'))
+
+    def main(self):
+        stdscr = curses.initscr()
+        curses.cbreak()
+        stdscr.keypad(True)
+        curses.start_color()  # Включаем поддержку цветов
+
+        try:
+            self.start(stdscr)
+        finally:
+            curses.nocbreak()
+            stdscr.keypad(False)
+            curses.echo()
+            curses.endwin()
+
+
 if __name__ == '__main__':
-    # очищаем консоль
-    os.system("cls" if os.name == "nt" else "clear")
-    # приветствуем пользователя
-    print("Welcome to SLX chat!")
-    # запускаем клиентское приложение
-    run()
+    chat_app = ChatApp()
+    chat_app.main()
