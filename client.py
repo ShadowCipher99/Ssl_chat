@@ -50,7 +50,7 @@ class ChatApp:
 
     def start(self, stdscr):
         self.sock_ssl.connect((self.HOST, self.PORT))
-        stdscr.addstr('Connected to server\nWelcome to RENCIR Chat')
+        stdscr.addstr('Connected to server')
         stdscr.refresh()
 
         receive_thread = threading.Thread(target=self.receive, args=(stdscr,))
