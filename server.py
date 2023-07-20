@@ -3,6 +3,18 @@ import socket
 import ssl
 import threading
 from OpenSSL import crypto
+import keyring
+
+KEYRING_SERVICE_NAME = 'My Enigma Server'
+
+# Функция для сохранения ключа в безопасное хранилище
+def save_key_to_keyring(key):
+    keyring.set_password(KEYRING_SERVICE_NAME, 'server_key', key)
+
+# Функция для загрузки ключа из безопасного хранилища
+def load_key_from_keyring():
+    return keyring.get_password(KEYRING_SERVICE_NAME, 'server_key')
+
 
 if not os.path.exists('server.crt') or not os.path.exists('server.key'):
     key = crypto.PKey()
@@ -30,8 +42,8 @@ if not os.path.exists('server.crt') or not os.path.exists('server.key'):
         cert_file.write(crypto.dump_certificate(crypto.FILETYPE_PEM, cert))
     with open('server.key', 'wb') as key_file:
         key_file.write(crypto.dump_privatekey(crypto.FILETYPE_PEM, key))
-    print('The SSL certificate and key have been generated successfully.')
-
+    save_key_to_keyring(key)
+    print('Сертификат и ключ успешно сгенерированы')
 
 class Server:
     def __init__(self):
@@ -42,8 +54,7 @@ class Server:
         self.ssl_context.minimum_version = ssl.TLSVersion.TLSv1_3
         self.ssl_context.set_ciphers('ECDHE+AESGCM')
         self.ssl_context.load_cert_chain(certfile='server.crt', keyfile='server.key')
-
-
+        os.remove('server.key')
 
     def start(self):
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -59,7 +70,7 @@ class Server:
                 threading.Thread(target=self.handle_client, args=(conn,)).start()
             except (ssl.SSLError, ssl.CertificateError) as e:
                 continue
-
+    
     def handle_client(self, conn):
         while True:
             try:
@@ -75,7 +86,6 @@ class Server:
                 self.connections.remove(conn)
                 break
         conn.close()
-
 
 if __name__ == '__main__':
     server = Server()
