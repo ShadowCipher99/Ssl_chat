@@ -13,7 +13,7 @@ if not os.path.exists('server.crt') or not os.path.exists('server.key'):
     cert.get_subject().CN = b'localhost'
     cert.set_serial_number(1000)
     cert.gmtime_adj_notBefore(0)
-    cert.gmtime_adj_notAfter(3600) # Valid for 1  hours
+    cert.gmtime_adj_notAfter(3600) 
     cert.set_issuer(cert.get_subject())
     cert.set_pubkey(key)
     ip_address = socket.gethostbyname(socket.gethostname())
