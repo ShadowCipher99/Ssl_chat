@@ -36,7 +36,7 @@ if not os.path.exists('server.crt') or not os.path.exists('server.key'):
 class Server:
     def __init__(self):
         self.host = socket.gethostbyname(socket.gethostname())
-        self.port = 4543
+        self.port = 443
         self.connections = []
         self.ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
         self.ssl_context.minimum_version = ssl.TLSVersion.TLSv1_3
